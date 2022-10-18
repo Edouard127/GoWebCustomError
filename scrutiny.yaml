@@ -1,0 +1,127 @@
+# Make a scrunity deployment for Kubernetes
+#
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scrutiny-monitoring
+  labels:
+    app: scrutiny-monitoring
+spec:
+
+    replicas: 1
+    selector:
+        matchLabels:
+          app: scrutiny-monitoring
+    template:
+        metadata:
+          labels:
+            app: scrutiny-monitoring
+        spec:
+          containers:
+          - name: scrutiny-monitoring
+            image: ghcr.io/analogj/scrutiny:master-omnibus
+            ports:
+            - name: scrutiny-web
+              protocol: TCP
+              containerPort: 8080
+            - name: scrutiny-api
+              protocol: TCP
+              containerPort: 8086
+            securityContext:
+              capabilities:
+                add:
+                  - SYS_RAWIO
+            volumeMounts:
+              - mountPath: /opt/scrutiny/config
+                name: config
+              - mountPath: /opt/scrutiny/influxdb
+                name: influxdb
+          volumes:
+            - name: config
+              persistentVolumeClaim:
+                claimName: scrutiny-config-persistent-storage-claim
+            - name: influxdb
+              persistentVolumeClaim:
+                claimName: scrutiny-influxdb-persistent-storage-claim
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: scrutiny-monitoring-service
+  labels:
+    app: scrutiny-monitoring
+spec:
+    ports:
+      - name: scrutiny-web
+        protocol: TCP
+        port: 80
+        targetPort: 8080
+      - name: scrutiny-monitoring
+        protocol: TCP
+        port: 8086
+        targetPort: 8086
+    selector:
+      app: scrutiny-monitoring
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: scrutiny-config-persistent-storage-claim
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  volumeName: scrutiny-config-persistent-storage
+  storageClassName: manual
+---
+# Persistent Volume
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: scrutiny-config-persistent-storage
+spec:
+  capacity:
+    storage: 5Gi
+  nfs:
+    server: 192.168.0.33
+    path: /mnt/data/scrutiny/config
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  volumeMode: Filesystem
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: scrutiny-influxdb-persistent-storage-claim
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: scrutiny-influxdb-persistent-storage
+  storageClassName: manual
+---
+# Persistent Volume
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: scrutiny-influxdb-persistent-storage
+spec:
+  capacity:
+    storage: 10Gi
+  nfs:
+    server: 192.168.0.33
+    path: /mnt/data/scrutiny/influxdb
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: manual
+  volumeMode: Filesystem
+
